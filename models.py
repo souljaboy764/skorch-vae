@@ -131,9 +131,9 @@ class VAE(AE):
 		
 		# Decoding from Monte Carlo Estimation
 		z_samples = z_dist.rsample((self.num_samples,))
-		x_gen = self._dec(z_samples).view(-1, x.shape[-1])
+		x_gen = self._dec(z_samples)
 
-		return x_gen, x.repeat(self.num_samples,1), z_samples, z_dist
+		return x_gen, x.unsqueeze(0).repeat(self.num_samples,1,1), z_samples, z_dist
 
 	class Encoder(AE.Encoder):
 		"""[Encoder Class Q(z|X) for the VAE]
@@ -163,15 +163,3 @@ class VAE(AE):
 			z_mean = self._latent(hidden)
 			
 			return Normal(z_mean, torch.exp(self._logstd(hidden)))
-
-class VAEWrapper(NeuralNet):
-	def get_loss(self, y_pred, y_true, *args, **kwargs):
-		x_gen, x, z_samples, z_dist = y_pred  # <- unpack the tuple that was returned by `forward`
-		recon_loss = super().get_loss(x_gen, x, *args, **kwargs)
-		kl_loss = kl_divergence(z_dist, Normal(0, 1)).mean()
-		return recon_loss + kl_loss
-
-class AEWrapper(NeuralNet):
-	def get_loss(self, y_pred, y_true, *args, **kwargs):
-		x_gen, x, z_samples = y_pred  # <- unpack the tuple that was returned by `forward`
-		return super().get_loss(x_gen, x, *args, **kwargs)
