@@ -1,6 +1,11 @@
 import torch
 from torch import nn
 from torch.distributions import Normal
+from torch.distributions.kl import kl_divergence
+
+from skorch import NeuralNet
+
+
 
 class AE(nn.Module):
 	"""[Autoencoder Class for learning latent space representations of input data. Code is inspired from https://github.com/graviraja/pytorch-sample-codes/blob/master/simple_vae.py]
@@ -32,7 +37,7 @@ class AE(nn.Module):
 		
 		#decode
 		x_gen = self._dec(z)
-		return x_gen, z
+		return x_gen, x, z
 		
 	class Encoder(nn.Module):
 		"""[Encoder Class Q(X) for an Autoencoder]
@@ -128,7 +133,7 @@ class VAE(AE):
 		z_samples = z_dist.rsample((self.num_samples,))
 		x_gen = self._dec(z_samples).view(-1, x.shape[-1])
 
-		return x_gen, z_samples, z_dist
+		return x_gen, x.repeat(self.num_samples,1), z_samples, z_dist
 
 	class Encoder(AE.Encoder):
 		"""[Encoder Class Q(z|X) for the VAE]
@@ -158,3 +163,15 @@ class VAE(AE):
 			z_mean = self._latent(hidden)
 			
 			return Normal(z_mean, torch.exp(self._logstd(hidden)))
+
+class VAEWrapper(NeuralNet):
+	def get_loss(self, y_pred, y_true, *args, **kwargs):
+		x_gen, x, z_samples, z_dist = y_pred  # <- unpack the tuple that was returned by `forward`
+		recon_loss = super().get_loss(x_gen, x, *args, **kwargs)
+		kl_loss = kl_divergence(z_dist, Normal(0, 1)).mean()
+		return recon_loss + kl_loss
+
+class AEWrapper(NeuralNet):
+	def get_loss(self, y_pred, y_true, *args, **kwargs):
+		x_gen, x, z_samples = y_pred  # <- unpack the tuple that was returned by `forward`
+		return super().get_loss(x_gen, x, *args, **kwargs)
